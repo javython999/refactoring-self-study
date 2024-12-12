@@ -1,60 +1,7 @@
 export function statement(invoice) {
-
-  const format = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format;
-
-  let totalAmount = 0;
-  let detail = "";
-  for (let performance of invoice.performances) {
-    const play = performance.play;
-    let thisAmount = 0;
-
-    switch (play.type) {
-      case 'tragedy': // 비극
-        thisAmount = 40000;
-        if (performance.audience > 30) {
-          thisAmount += 1000 * (performance.audience - 30);
-        }
-        break;
-      case 'comedy': // 희극
-        thisAmount = 30000;
-        if (performance.audience > 20) {
-          thisAmount += 10000 + 500 * (performance.audience - 20);
-        }
-        thisAmount += 300 * performance.audience;
-        break;
-      default:
-        throw new Error(`알 수 없는 장르: ${play.type}`);
-    }
-    totalAmount += thisAmount;
-
-    // 청구 내역을 출력한다.
-    detail += `  ${play.name}: ${format(thisAmount / 100)} (${performance.audience}석)\n`;
-    
-  }
-
-  
-  // 포인트를 적립한다.
-  let volumeCredits = 0;
-  for (let performance of invoice.performances) {
-    const play = performance.play;
-    volumeCredits += Math.max(performance.audience - 30, 0);
-    // 희극 관객 5명마다 추가 포인트를 제공한다.
-    if ('comedy' === play.type) volumeCredits += Math.floor(performance.audience / 5);
-  }
-
-  
-  function getResult(customer, detail, totalAmount, volumeCredits) {
-    return `청구 내역 (고객명: ${customer})\n${detail}총액: ${totalAmount}\n적립 포인트: ${volumeCredits}점\n`;
-  }
-
-  return getResult(invoice.customer, detail, format(totalAmount / 100), volumeCredits);
+  return `${invoice.plainTextCustomer()}${invoice.detail()}총액: ${invoice.totalAmount()}\n적립 포인트: ${invoice.totalVolumeCredits()}점\n`;
 }
 
-// 사용예:
 class Play {
   #name;
   #type;
@@ -70,6 +17,48 @@ class Play {
 
   get type() {
     return this.#type;
+  }
+}
+
+class TragedyPlay extends Play {
+  #baseAmount;
+
+  constructor(name) {
+    super(name, 'tragedy');
+    this.#baseAmount = 40000;
+  }
+
+  get baseAmount() {
+    return this.#baseAmount;
+  }
+
+  amount(audience) {
+    let amount = this.baseAmount;
+    return audience > 30 
+      ? amount += 1000 * (audience - 30)
+      : amount;
+  }
+}
+
+class Comedy extends Play {
+  #baseAmount;
+
+  constructor(name) {
+    super(name, 'comedy');
+    this.#baseAmount = 30000;
+  }
+
+  get baseAmount() {
+    return this.#baseAmount;
+  }
+
+  amount(audience) {
+    let amount = this.baseAmount;
+    if (audience > 20) {
+      amount += 10000 + 500 * (audience - 20);
+    }
+    amount += 300 * audience
+    return amount;
   }
 }
 
@@ -89,20 +78,68 @@ class Performance {
   get audience() {
     return this.#audience;
   }
+
+  get volumeCredit() {
+    let credits = Math.max(this.audience - 30, 0);
+    return this.play.type === 'comedy' 
+      ? credits +  Math.floor(this.audience / 5)
+      : credits;
+  }
 }
 
-const invoicesJSON = [
-  {
-    customer: 'BigCo',
-    performances: [
-      new Performance(new Play('Hamlet', 'tragedy'), 55),
-      new Performance(new Play('As You Like It', 'comedy'), 35),
-      new Performance(new Play('Othello', 'tragedy'), 40),
-    ],
-  },
-];
+class Invoice {
+  #customer;
+  #performances;
 
-const result = statement(invoicesJSON[0]);
+  constructor(customer, performances) {
+    this.#customer = customer;
+    this.#performances = performances;
+
+    this.format = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+    }).format;
+  }
+
+  get customer() {
+    return this.#customer;
+  }
+
+  get performances() {
+    return this.#performances;
+  }
+
+  detail() {
+    return this.#performances.map(performance => {
+      const play = performance.play;
+      return `  ${play.name}: ${this.format(play.amount(performance.audience) / 100)} (${performance.audience}석)\n`;
+    }).join('');  // 배열을 하나의 문자열로 합침
+  }
+
+  totalAmount() {
+    return this.format(this.#performances
+              .map(performance => performance.play.amount(performance.audience))
+              .reduce((sum, amount) => sum + amount, 0) / 100);
+  }
+
+  totalVolumeCredits() {
+    return this.#performances
+            .map(performance => performance.volumeCredit)
+            .reduce((sum, credit) => sum + credit, 0);
+  }
+
+  plainTextCustomer() {
+    return `청구 내역 (고객명: ${this.customer})\n`;
+  }
+}
+
+const invoice = new Invoice(
+  'BigCo', 
+  [new Performance(new TragedyPlay('Hamlet'), 55), new Performance(new Comedy('As You Like It'), 35), new Performance(new TragedyPlay('Othello'), 40),]
+)
+
+const result = statement(invoice);
 const expected =
   '청구 내역 (고객명: BigCo)\n' +
   '  Hamlet: $650.00 (55석)\n' +
