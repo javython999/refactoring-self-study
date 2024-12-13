@@ -1,5 +1,5 @@
 export function statement(invoice) {
-  return `${invoice.plainTextCustomer()}${invoice.detail()}총액: ${invoice.totalAmount()}\n적립 포인트: ${invoice.totalVolumeCredits()}점\n`;
+  return invoice.plainText();
 }
 
 class Play {
@@ -110,13 +110,6 @@ class Invoice {
     return this.#performances;
   }
 
-  detail() {
-    return this.#performances.map(performance => {
-      const play = performance.play;
-      return `  ${play.name}: ${this.format(play.amount(performance.audience) / 100)} (${performance.audience}석)\n`;
-    }).join('');  // 배열을 하나의 문자열로 합침
-  }
-
   totalAmount() {
     return this.format(this.#performances
               .map(performance => performance.play.amount(performance.audience))
@@ -129,8 +122,29 @@ class Invoice {
             .reduce((sum, credit) => sum + credit, 0);
   }
 
-  plainTextCustomer() {
+  plainText() {
+    return this.#plainTextCustomer()
+        + this.#planTextPerfomances() 
+        + this.#plainTextTotalAmount()
+        + this.#plainTotalVolumeCredits();
+  }
+
+  #plainTextCustomer() {
     return `청구 내역 (고객명: ${this.customer})\n`;
+  }
+
+  #planTextPerfomances() {
+    let result = '';
+    result += this.#performances.map(performance => `  ${performance.play.name}: ${this.format(performance.play.amount(performance.audience) / 100)} (${performance.audience}석)`).join('\n');
+    return result += '\n';
+  }
+
+  #plainTextTotalAmount() {
+    return `총액: ${this.totalAmount()}\n`;
+  }
+
+  #plainTotalVolumeCredits() {
+    return `적립 포인트: ${this.totalVolumeCredits()}점\n`;
   }
 }
 
